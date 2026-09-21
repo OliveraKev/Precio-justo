@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pruebas de validaciones</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+    #resumen { font-size: 1.25rem; font-weight: bold; }
+    ul { list-style: none; padding: 0; }
+    li { padding: .4rem .6rem; margin: .25rem 0; border-radius: 6px; }
+    li.ok { background: #e6f4ea; color: #1e6b34; }
+    li.fallo { background: #fdeaea; color: #a11a1a; }
+  </style>
+</head>
+<body>
+  <h1>Pruebas de validaciones (límites, mensajes y avisos)</h1>
+  <p id="resumen"></p>
+  <ul id="resultados"></ul>
+
+  <script src="../js/calculator.js"></script>
+  <script src="../js/model.js"></script>
+  <script src="../js/validaciones.js"></script>
+  <script>
+    const C = Calculator;
+    const V = Validations;
+    const lista = document.getElementById('resultados');
+    let total = 0;
+    let aprobadas = 0;
+
+    // ----- Mini herramientas de prueba -----
+    function prueba(nombre, fn) {
+      total++;
+      const li = document.createElement('li');
+      try {
+        fn();
+        aprobadas++;
+        li.className = 'ok';
+        li.textContent = '✅ ' + nombre;
+      } catch (e) {
+        li.className = 'fallo';
+        li.textContent = '❌ ' + nombre + ' → ' + e.message;
+      }
+      lista.appendChild(li);
+    }
+
+    function igual(actual, esperado) {
+      if (actual !== esperado) {
+        throw new Error('se esperaba ' + JSON.stringify(esperado) + ' pero se obtuvo ' + JSON.stringify(actual));
+      }
+    }
+
+    // Ejecuta la función, exige que lance un error y devuelve su mensaje.
+    function mensajeDe(fn) {
+      try {
+        fn();
+      } catch (e) {
+        return e.message;
+      }
+      throw new Error('se esperaba un error y no ocurrió');
+    }
+
+    function noLanza(fn) {
+      try {
+        fn();
+      } catch (e) {
+        throw new Error('no debía fallar pero falló: ' + e.message);
+      }
+    }
+
+    function contiene(texto, fragmentos) {
+      fragmentos.forEach(function (f) {
+        if (texto.indexOf(f) === -1) {
+          throw new Error('falta "' + f + '" en: ' + texto);
+        }
+      });
+    }
+
+    // ----- Datos de ejemplo -----
+    function insumoOk(nombre, usada, comprada) {
+      return {
+        nombre: nombre === undefined ? 'Harina' : nombre,
+        precioCompra: 4,
+        cantidadComprada: comprada === undefined ? 1000 : comprada,
+        cantidadUsada: usada === undefined ? 250 : usada,
+        unidad: 'g'
+      };
+    }
+
+    function producto(cambios) {
+      return Object.assign({
+        nombre: 'Torta',
+        insumos: [insumoOk()],
+        costosAdicionales: 0,
+        unidadesPorLote: 8,
+        margen: 40,
+        impuesto: 0
+      }, cambios || {});
+    }
+
+    function insumosNumerados(n) {
+      const lote = [];
+      for (let i = 0; i < n; i++) lote.push(insumoOk('Insumo ' + (i + 1)));
+      return lote;
+    }
+
+    // ===== Mensajes con género y número correctos =====
+
+    prueba('mensaje: cantidad comprada = 0 (femenino singular)', function () {
+      igual(
+        mensajeDe(function () { C.costoInsumo({ precioCompra: 1, cantidadComprada: 0, cantidadUsada: 1 }); }),
+        'La cantidad comprada debe ser mayor que cero.'
+      );
+    });
+
+    prueba('mensaje: unidades por lote = 0 (femenino plural)', function () {
+      igual(
+        mensajeDe(function () { C.costoUnitario(10, 0); }),
+        'Las unidades por lote deben ser mayores que cero.'
+      );
+    });
+
+    prueba('mensaje: costos adicionales negativos (masculino plural)', function () {
+      igual(
+        mensajeDe(function () { C.costoLote([], -1); }),
+        'Los costos adicionales no pueden ser negativos.'
+      );
+    });
+
+    prueba('mensaje: cantidad usada negativa (femenino singular)', function () {
+      igual(
+        mensajeDe(function () { C.costoInsumo({ precioCompra: 1, cantidadComprada: 1, cantidadUsada: -1 }); }),
+        'La cantidad usada no puede ser negativa.'
+      );
+    });
+
+    prueba('mensaje: precio de compra negativo (masculino singular)', function () {
+      igual(
+        mensajeDe(function () { C.costoInsumo({ precioCompra: -1, cantidadComprada: 1, cantidadUsada: 1 }); }),
+        'El precio de compra no puede ser negativo.'
+      );
+    });
+
+    prueba('mensaje: margen negativo y margen de 100 %', function () {
+      igual(
+        mensajeDe(function () { C.precioSugerido(5, -1); }),
+        'El margen no puede ser negativo.'
+      );
+      igual(
+        mensajeDe(function () { C.precioSugerido(5, 100); }),
+        'El margen debe ser menor que 100 %.'
+      );
+    });
+
+    prueba('mensaje: valor que no es número, singular y plural', function () {
+      igual(
+        mensajeDe(function () { C.costoLote([], NaN); }),
+        'Los costos adicionales deben ser números válidos.'
+      );
+      igual(
+        mensajeDe(function () { C.costoInsumo({ precioCompra: 'x', cantidadComprada: 1, cantidadUsada: 1 }); }),
+        'El precio de compra debe ser un número válido.'
+      );
+    });
+
+    // ===== Límites (errores que bloquean) =====
+
+    prueba('LIMITES: expone los topes configurados', function () {
+      igual(C.LIMITES.maxInsumos, 50);
+      igual(C.LIMITES.valorMaximo, 1000000000);
+      igual(C.LIMITES.impuestoMaximo, 100);
+    });
+
+    prueba('límite: un valor exactamente en el tope se acepta', function () {
+      noLanza(function () {
+        C.calcularProducto(producto({ insumos: [], costosAdicionales: 1000000000 }));
+      });
+    });
+
+    prueba('límite: un valor sobre el tope se rechaza', function () {
+      const m = mensajeDe(function () {
+        C.calcularProducto(producto({ insumos: [], costosAdicionales: 1000000001 }));
+      });
+      contiene(m, ['Los costos adicionales', 'no pueden superar']);
+    });
+
+    prueba('límite: el mensaje de un insumo muestra el tope con espacios', function () {
+      igual(
+        mensajeDe(function () {
+          C.calcularProducto(producto({
+            insumos: [{ nombre: 'X', precioCompra: 2000000000, cantidadComprada: 1, cantidadUsada: 1, unidad: 'g' }]
+          }));
+        }),
+        'El precio de compra no puede superar 1\u00A0000\u00A0000\u00A0000.'
+      );
+    });
+
+    prueba('límite: 50 insumos se aceptan y 51 se rechazan', function () {
+      noLanza(function () { C.calcularProducto(producto({ insumos: insumosNumerados(50) })); });
+      const m = mensajeDe(function () {
+        C.calcularProducto(producto({ insumos: insumosNumerados(51) }));
+      });
+      contiene(m, ['máximo 50']);
+    });
+
+    prueba('límite: impuesto de 100 % se acepta y 101 % se rechaza', function () {
+      noLanza(function () { C.calcularProducto(producto({ impuesto: 100 })); });
+      igual(
+        mensajeDe(function () { C.calcularProducto(producto({ impuesto: 101 })); }),
+        'El impuesto no puede superar 100 %.'
+      );
+    });
+
+    prueba('límite: un resultado desproporcionado se rechaza', function () {
+      const m = mensajeDe(function () {
+        C.calcularProducto(producto({
+          insumos: [{ nombre: 'X', precioCompra: 1000000000, cantidadComprada: 0.000001, cantidadUsada: 1000000000, unidad: 'g' }]
+        }));
+      });
+      contiene(m, ['demasiado grande']);
+    });
+
+    // ===== Avisos (no bloquean) =====
+
+    prueba('avisos: un producto normal no genera ninguno', function () {
+      igual(V.advertencias(producto()).length, 0);
+    });
+
+    prueba('avisos: margen 0 % avisa que no hay ganancia', function () {
+      const r = V.advertencias(producto({ margen: 0 }));
+      igual(r.length, 1);
+      contiene(r[0], ['margen de 0 %', 'no ganas nada']);
+    });
+
+    prueba('avisos: margen 80 % no avisa, 85 % sí (6.67 veces el costo)', function () {
+      igual(V.advertencias(producto({ margen: 80 })).length, 0);
+      const r = V.advertencias(producto({ margen: 85 }));
+      igual(r.length, 1);
+      contiene(r[0], ['85 %', '6.67']);
+    });
+
+    prueba('avisos: insumos repetidos (sin distinguir mayúsculas ni tildes)', function () {
+      const r = V.advertencias(producto({
+        insumos: [insumoOk('Harina'), insumoOk(' harina '), insumoOk('Azúcar'), insumoOk('AZUCAR')]
+      }));
+      igual(r.length, 1);
+      contiene(r[0], ['repetidos', '«Harina»', '«Azúcar»']);
+    });
+
+    prueba('avisos: los nombres vacíos no cuentan como repetidos', function () {
+      const r = V.advertencias(producto({ insumos: [insumoOk(''), insumoOk('   ')] }));
+      igual(r.length, 0);
+    });
+
+    prueba('avisos: cantidad usada mayor que la comprada (no si es igual)', function () {
+      const r = V.advertencias(producto({ insumos: [insumoOk('Harina', 1500, 1000)] }));
+      igual(r.length, 1);
+      contiene(r[0], ['«Harina»', '1500', '1000']);
+      igual(V.advertencias(producto({ insumos: [insumoOk('Harina', 1000, 1000)] })).length, 0);
+    });
+
+    prueba('avisos: varios problemas dan varios avisos', function () {
+      const r = V.advertencias(producto({
+        margen: 0,
+        insumos: [insumoOk('Harina'), insumoOk('harina')]
+      }));
+      igual(r.length, 2);
+    });
+
+    prueba('avisos: entradas raras no lanzan error y devuelven lista vacía', function () {
+      [null, undefined, {}, 'texto', 42].forEach(function (entrada) {
+        const r = V.advertencias(entrada);
+        igual(Array.isArray(r), true);
+        igual(r.length, 0);
+      });
+    });
+
+    prueba('integración: un producto normalizado con margen 85 % genera el aviso', function () {
+      const n = ProductModel.normalizarProducto({
+        nombre: 'Torta',
+        unidadesPorLote: '8',
+        costosAdicionales: '0',
+        margen: '85',
+        impuesto: '0',
+        insumos: [{ nombre: 'Harina', precioCompra: '4,2', cantidadComprada: '1000', cantidadUsada: '250', unidad: 'g' }]
+      });
+      igual(n.errores.length, 0);
+      const r = V.advertencias(n.producto);
+      igual(r.length, 1);
+      contiene(r[0], ['85 %']);
+    });
+
+    // ----- Resumen -----
+    const resumen = document.getElementById('resumen');
+    const todoBien = aprobadas === total;
+    resumen.textContent = (todoBien ? '✅ ' : '❌ ') + aprobadas + ' de ' + total + ' pruebas pasaron';
+    resumen.style.color = todoBien ? '#1e6b34' : '#a11a1a';
+  </script>
+</body>
+</html>

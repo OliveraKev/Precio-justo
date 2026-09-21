@@ -5,31 +5,121 @@
  * la pantalla ni LocalStorage. Por eso son fáciles de probar.
  *
  * IMPORTANTE: todos los valores de entrada deben ser de tipo number.
- * app.js convertirá lo que escriba el usuario con Number() antes de llamar aquí.
+ * app.js convertirá lo que escriba el usuario con ProductModel antes de llamar aquí.
+ *
+ * Etapa 8: se agregan límites (errores que bloquean) y mensajes con
+ * género y número correctos.
  */
 (function (global) {
   'use strict';
 
+  // ---------- Límites (se pueden ajustar aquí) ----------
+
+  const LIMITES = {
+    valorMaximo: 1000000000,        // tope para cualquier número que escribe el usuario
+    impuestoMaximo: 100,            // en %
+    maxInsumos: 50,                 // insumos por producto
+    resultadoMaximo: 1000000000000  // si un resultado lo supera, casi seguro hay un error de tipeo
+  };
+
+  // ---------- Campos (para que los mensajes concuerden) ----------
+
+  function campo(texto, femenino, plural) {
+    return { texto: texto, femenino: femenino, plural: plural };
+  }
+
+  const CAMPO = {
+    precioCompra: campo('El precio de compra', false, false),
+    cantidadComprada: campo('La cantidad comprada', true, false),
+    cantidadUsada: campo('La cantidad usada', true, false),
+    costosAdicionales: campo('Los costos adicionales', false, true),
+    unidadesPorLote: campo('Las unidades por lote', true, true),
+    costoLote: campo('El costo del lote', false, false),
+    costoPorUnidad: campo('El costo por unidad', false, false),
+    margen: campo('El margen', false, false),
+    impuesto: campo('El impuesto', false, false),
+    precio: campo('El precio', false, false)
+  };
+
   // ---------- Validaciones internas ----------
 
-  function validarNumero(valor, nombre) {
+  // 1000000000 → "1 000 000 000" (con espacios que no se separan al cambiar de línea)
+  function formatearLimite(n) {
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
+  }
+
+  // negativo, negativa, negativos, negativas
+  function negativo(c) {
+    return 'negativ' + (c.femenino ? 'a' : 'o') + (c.plural ? 's' : '');
+  }
+
+  function validarNumero(valor, c) {
     if (typeof valor !== 'number' || !Number.isFinite(valor)) {
-      throw new Error(nombre + ' debe ser un número válido.');
+      throw new Error(c.texto + (c.plural ? ' deben ser números válidos.' : ' debe ser un número válido.'));
     }
   }
 
-  function validarNoNegativo(valor, nombre) {
-    validarNumero(valor, nombre);
+  function validarNoNegativo(valor, c) {
+    validarNumero(valor, c);
     if (valor < 0) {
-      throw new Error(nombre + ' no puede ser negativo.');
+      throw new Error(c.texto + (c.plural ? ' no pueden ser ' : ' no puede ser ') + negativo(c) + '.');
     }
   }
 
-  function validarMayorQueCero(valor, nombre) {
-    validarNumero(valor, nombre);
+  function validarMayorQueCero(valor, c) {
+    validarNumero(valor, c);
     if (valor <= 0) {
-      throw new Error(nombre + ' debe ser mayor que cero.');
+      throw new Error(c.texto + (c.plural ? ' deben ser mayores que cero.' : ' debe ser mayor que cero.'));
     }
+  }
+
+  function validarMaximo(valor, c, maximo, sufijo) {
+    if (valor > maximo) {
+      throw new Error(
+        c.texto + (c.plural ? ' no pueden superar ' : ' no puede superar ') +
+        formatearLimite(maximo) + (sufijo || '') + '.'
+      );
+    }
+  }
+
+  // Número válido, no negativo y que no pase el tope general.
+  function validarTope(valor, c) {
+    validarNoNegativo(valor, c);
+    validarMaximo(valor, c, LIMITES.valorMaximo);
+  }
+
+  // ---------- Límites de un producto completo ----------
+
+  function validarLimites(producto) {
+    const insumos = Array.isArray(producto.insumos) ? producto.insumos : [];
+
+    if (insumos.length > LIMITES.maxInsumos) {
+      throw new Error('Un producto puede tener como máximo ' + LIMITES.maxInsumos + ' insumos.');
+    }
+
+    insumos.forEach(function (insumo) {
+      validarTope(insumo.precioCompra, CAMPO.precioCompra);
+      validarTope(insumo.cantidadComprada, CAMPO.cantidadComprada);
+      validarTope(insumo.cantidadUsada, CAMPO.cantidadUsada);
+    });
+
+    validarTope(producto.costosAdicionales, CAMPO.costosAdicionales);
+    validarTope(producto.unidadesPorLote, CAMPO.unidadesPorLote);
+
+    if (producto.impuesto !== undefined) {
+      validarNoNegativo(producto.impuesto, CAMPO.impuesto);
+      validarMaximo(producto.impuesto, CAMPO.impuesto, LIMITES.impuestoMaximo, ' %');
+    }
+  }
+
+  // Si algún resultado es infinito o enorme, casi seguro hay un error de tipeo.
+  function validarResultado(resultado) {
+    Object.keys(resultado).forEach(function (clave) {
+      const v = resultado[clave];
+      if (!Number.isFinite(v) || Math.abs(v) > LIMITES.resultadoMaximo) {
+        throw new Error('El resultado es demasiado grande. Revisa los números que escribiste.');
+      }
+    });
   }
 
   // ---------- Fórmulas ----------
@@ -39,9 +129,9 @@
    * costo_insumo = (precio_compra / cantidad_comprada) × cantidad_usada
    */
   function costoInsumo(insumo) {
-    validarNoNegativo(insumo.precioCompra, 'El precio de compra');
-    validarMayorQueCero(insumo.cantidadComprada, 'La cantidad comprada');
-    validarNoNegativo(insumo.cantidadUsada, 'La cantidad usada');
+    validarNoNegativo(insumo.precioCompra, CAMPO.precioCompra);
+    validarMayorQueCero(insumo.cantidadComprada, CAMPO.cantidadComprada);
+    validarNoNegativo(insumo.cantidadUsada, CAMPO.cantidadUsada);
 
     return (insumo.precioCompra / insumo.cantidadComprada) * insumo.cantidadUsada;
   }
@@ -50,7 +140,7 @@
    * Costo total del lote: suma de insumos + costos adicionales (gas, empaque...).
    */
   function costoLote(insumos, costosAdicionales) {
-    validarNoNegativo(costosAdicionales, 'Los costos adicionales');
+    validarNoNegativo(costosAdicionales, CAMPO.costosAdicionales);
 
     const totalInsumos = insumos.reduce(function (suma, insumo) {
       return suma + costoInsumo(insumo);
@@ -64,8 +154,8 @@
    * costo_unitario = costo_lote / unidades_por_lote
    */
   function costoUnitario(costoDelLote, unidadesPorLote) {
-    validarNoNegativo(costoDelLote, 'El costo del lote');
-    validarMayorQueCero(unidadesPorLote, 'Las unidades por lote');
+    validarNoNegativo(costoDelLote, CAMPO.costoLote);
+    validarMayorQueCero(unidadesPorLote, CAMPO.unidadesPorLote);
 
     return costoDelLote / unidadesPorLote;
   }
@@ -76,8 +166,8 @@
    * El margen debe ser menor que 100, porque con 100 % habría que dividir entre cero.
    */
   function precioSugerido(costoPorUnidad, margen) {
-    validarNoNegativo(costoPorUnidad, 'El costo por unidad');
-    validarNoNegativo(margen, 'El margen');
+    validarNoNegativo(costoPorUnidad, CAMPO.costoPorUnidad);
+    validarNoNegativo(margen, CAMPO.margen);
     if (margen >= 100) {
       throw new Error('El margen debe ser menor que 100 %.');
     }
@@ -90,8 +180,8 @@
    * precio_final = precio_sugerido × (1 + impuesto/100)
    */
   function precioFinal(precio, impuesto) {
-    validarNoNegativo(precio, 'El precio');
-    validarNoNegativo(impuesto, 'El impuesto');
+    validarNoNegativo(precio, CAMPO.precio);
+    validarNoNegativo(impuesto, CAMPO.impuesto);
 
     return precio * (1 + impuesto / 100);
   }
@@ -116,10 +206,18 @@
   /**
    * Calcula todo de una vez a partir de un producto con la forma:
    * { insumos: [...], costosAdicionales, unidadesPorLote, margen, impuesto }
+   * Lanza un Error con un mensaje claro si algo no es válido.
    */
   function calcularProducto(producto) {
     const insumos = Array.isArray(producto.insumos) ? producto.insumos : [];
     const impuesto = producto.impuesto === undefined ? 0 : producto.impuesto;
+
+    validarLimites({
+      insumos: insumos,
+      costosAdicionales: producto.costosAdicionales,
+      unidadesPorLote: producto.unidadesPorLote,
+      impuesto: impuesto
+    });
 
     const totalLote = costoLote(insumos, producto.costosAdicionales);
     const unitario = costoUnitario(totalLote, producto.unidadesPorLote);
@@ -127,18 +225,22 @@
     const conImpuesto = precioFinal(sugerido, impuesto);
     const ganancia = gananciaPorUnidad(sugerido, unitario);
 
-    return {
+    const resultado = {
       costoLote: totalLote,
       costoUnitario: unitario,
       precioSugerido: sugerido,
       precioFinal: conImpuesto,
       gananciaUnidad: ganancia
     };
+
+    validarResultado(resultado);
+    return resultado;
   }
 
   // ---------- Exportar ----------
   // En el navegador queda disponible como el objeto global "Calculator".
-  const API = {
+  global.Calculator = {
+    LIMITES: LIMITES,
     costoInsumo: costoInsumo,
     costoLote: costoLote,
     costoUnitario: costoUnitario,
@@ -146,8 +248,7 @@
     precioFinal: precioFinal,
     gananciaPorUnidad: gananciaPorUnidad,
     redondear: redondear,
+    validarLimites: validarLimites,
     calcularProducto: calcularProducto
   };
-
-  global.Calculator = API;
 })(globalThis);

@@ -2,7 +2,8 @@
  * app.js — Conecta la pantalla (index.html) con la lógica de PrecioJusto.
  *
  * Etapa 7A: formulario, insumos, valores interpretados y cálculo en vivo.
- * Etapa 7B (productos.js) agregará guardar, listar, editar y eliminar.
+ * Etapa 7B (productos.js): guardar, listar, editar y eliminar.
+ * Etapa 8: avisos (validaciones.js) y tope de insumos.
  *
  * Regla de seguridad: el texto del usuario solo se escribe con .value y
  * .textContent, nunca con innerHTML.
@@ -12,8 +13,10 @@
 
   // ---------- Comprobación de dependencias ----------
 
-  if (!global.Calculator || !global.ProductModel) {
-    console.error('Faltan calculator.js o model.js: revisa las etiquetas <script> de index.html.');
+  if (!global.Calculator || !global.ProductModel || !global.Validations) {
+    console.error(
+      'Faltan calculator.js, model.js o validaciones.js: revisa las etiquetas <script> de index.html.'
+    );
     const aviso = document.getElementById('mensaje-resultado');
     if (aviso) {
       aviso.className = 'alert alert-danger';
@@ -31,6 +34,7 @@
   const formulario = $('form-producto');
   const insumosBody = $('insumos-body');
   const insumosVacio = $('insumos-vacio');
+  const botonAgregarInsumo = $('btn-agregar-insumo');
   const plantillaInsumo = $('plantilla-insumo');
   const mensajeResultado = $('mensaje-resultado');
   const mensajeEstado = $('mensaje-estado');
@@ -77,11 +81,13 @@
   }
 
   // Para la vista previa, un nombre vacío no debe tapar los resultados.
+  // Los insumos sin nombre reciben un nombre único ("Insumo 1", "Insumo 2"...)
+  // para que no aparezcan como repetidos en los avisos.
   function borradorParaVista(borrador) {
     const copia = JSON.parse(JSON.stringify(borrador));
     if (copia.nombre.trim() === '') copia.nombre = 'Sin nombre';
-    copia.insumos.forEach(function (insumo) {
-      if (insumo.nombre.trim() === '') insumo.nombre = 'Sin nombre';
+    copia.insumos.forEach(function (insumo, i) {
+      if (insumo.nombre.trim() === '') insumo.nombre = 'Insumo ' + (i + 1);
     });
     return copia;
   }
@@ -102,8 +108,18 @@
     return fila;
   }
 
-  function actualizarEstadoVacio() {
-    insumosVacio.classList.toggle('d-none', filasInsumos().length > 0);
+  // Muestra u oculta el mensaje "Aún no agregaste insumos" y desactiva
+  // el botón de agregar cuando se llega al máximo de insumos.
+  function actualizarEstadoInsumos() {
+    const cantidad = filasInsumos().length;
+    const maximo = Calculator.LIMITES.maxInsumos;
+    const lleno = cantidad >= maximo;
+
+    insumosVacio.classList.toggle('d-none', cantidad > 0);
+    botonAgregarInsumo.disabled = lleno;
+    botonAgregarInsumo.textContent = lleno
+      ? 'Límite de ' + maximo + ' insumos alcanzado'
+      : '+ Agregar insumo';
   }
 
   // ---------- "Se leerá como..." bajo cada número ----------
@@ -231,7 +247,7 @@
   function recalcular() {
     actualizarInterpretados();
     actualizarCostosFilas();
-    actualizarEstadoVacio();
+    actualizarEstadoInsumos();
 
     // 1) ¿Todos los campos se entienden como números?
     const normalizado = ProductModel.normalizarProducto(borradorParaVista(leerBorrador()));
@@ -241,7 +257,7 @@
       return;
     }
 
-    // 2) ¿Los valores tienen sentido? (margen menor que 100, unidades mayores que 0...)
+    // 2) ¿Los valores tienen sentido y respetan los límites?
     let calculo;
     try {
       calculo = Calculator.calcularProducto(normalizado.producto);
@@ -260,8 +276,14 @@
       return;
     }
 
+    // 4) Todo bien: mostramos resultados y, si corresponde, avisos que no bloquean.
     mostrarResultados(calculo);
-    mostrarMensajeResultado('ok', ['Cálculo actualizado.']);
+    const avisos = Validations.advertencias(normalizado.producto);
+    if (avisos.length > 0) {
+      mostrarMensajeResultado('aviso', avisos);
+    } else {
+      mostrarMensajeResultado('ok', ['Cálculo actualizado.']);
+    }
   }
 
   // ---------- Mensaje de estado (bajo los botones) ----------
@@ -316,8 +338,9 @@
   // Cualquier cambio en un campo recalcula al instante.
   formulario.addEventListener('input', recalcular);
 
-  // Botón "+ Agregar insumo".
-  $('btn-agregar-insumo').addEventListener('click', function () {
+  // Botón "+ Agregar insumo" (se desactiva solo al llegar al máximo).
+  botonAgregarInsumo.addEventListener('click', function () {
+    if (filasInsumos().length >= Calculator.LIMITES.maxInsumos) return;
     const fila = agregarFila();
     recalcular();
     campoDeFila(fila, 'nombre').focus();
@@ -338,24 +361,24 @@
     $('nombre').focus();
   });
 
-  // Guardar: evita que la página se recargue. El guardado real lo conecta productos.js (7B).
+  // Guardar: evita que la página se recargue. El guardado real lo conecta productos.js.
   formulario.addEventListener('submit', function (evento) {
     evento.preventDefault();
     if (typeof PrecioJusto.alGuardar === 'function') {
       PrecioJusto.alGuardar();
     } else {
-      mostrarEstado('El guardado se activa en la Etapa 7B.', 'info');
+      mostrarEstado('El guardado no está disponible: revisa que productos.js esté cargado.', 'error');
     }
   });
 
-  // ---------- Exponer lo que usará productos.js ----------
+  // ---------- Exponer lo que usa productos.js ----------
 
   const PrecioJusto = {
     leerBorrador: leerBorrador,
     cargarProducto: cargarProducto,
     reiniciar: reiniciar,
     mostrarEstado: mostrarEstado,
-    alGuardar: null // productos.js lo completa en la Etapa 7B
+    alGuardar: null // productos.js lo completa
   };
   global.PrecioJusto = PrecioJusto;
 
