@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pruebas de model.js</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+    #resumen { font-size: 1.25rem; font-weight: bold; }
+    ul { list-style: none; padding: 0; }
+    li { padding: .4rem .6rem; margin: .25rem 0; border-radius: 6px; }
+    li.ok { background: #e6f4ea; color: #1e6b34; }
+    li.fallo { background: #fdeaea; color: #a11a1a; }
+  </style>
+</head>
+<body>
+  <h1>Pruebas de model.js</h1>
+  <p id="resumen"></p>
+  <ul id="resultados"></ul>
+
+  <script src="../js/calculator.js"></script>
+  <script src="../js/model.js"></script>
+  <script>
+    const M = ProductModel;
+    const lista = document.getElementById('resultados');
+    let total = 0;
+    let aprobadas = 0;
+
+    // ----- Mini herramientas de prueba -----
+    function prueba(nombre, fn) {
+      total++;
+      const li = document.createElement('li');
+      try {
+        fn();
+        aprobadas++;
+        li.className = 'ok';
+        li.textContent = '✅ ' + nombre;
+      } catch (e) {
+        li.className = 'fallo';
+        li.textContent = '❌ ' + nombre + ' → ' + e.message;
+      }
+      lista.appendChild(li);
+    }
+
+    function igual(actual, esperado) {
+      if (actual !== esperado) {
+        throw new Error('se esperaba ' + JSON.stringify(esperado) + ' pero se obtuvo ' + JSON.stringify(actual));
+      }
+    }
+
+    function casiIgual(actual, esperado) {
+      if (Math.abs(actual - esperado) > 1e-9) {
+        throw new Error('se esperaba ' + esperado + ' pero se obtuvo ' + actual);
+      }
+    }
+
+    // ¿Hay algún mensaje que contenga TODOS estos fragmentos?
+    function hayError(errores, fragmentos) {
+      return errores.some(function (e) {
+        return fragmentos.every(function (f) { return e.indexOf(f) !== -1; });
+      });
+    }
+
+    // ----- convertirNumero -----
+    prueba('convertirNumero: acepta enteros y decimales con punto', function () {
+      igual(M.convertirNumero('12'), 12);
+      igual(M.convertirNumero('4.5'), 4.5);
+      igual(M.convertirNumero('0.25'), 0.25);
+    });
+
+    prueba('convertirNumero: acepta coma decimal (4,5 → 4.5)', function () {
+      igual(M.convertirNumero('4,5'), 4.5);
+      igual(M.convertirNumero('0,25'), 0.25);
+    });
+
+    prueba('convertirNumero: miles + decimales en ambos formatos', function () {
+      igual(M.convertirNumero('1.234,56'), 1234.56);
+      igual(M.convertirNumero('1,234.56'), 1234.56);
+    });
+
+    prueba('convertirNumero: un separador repetido es de miles', function () {
+      igual(M.convertirNumero('1.234.567'), 1234567);
+      igual(M.convertirNumero('1,234,567'), 1234567);
+    });
+
+    prueba('convertirNumero: un solo separador con 3 dígitos se trata como decimal', function () {
+      igual(M.convertirNumero('1.234'), 1.234);
+      igual(M.convertirNumero('1,234'), 1.234);
+    });
+
+    prueba('convertirNumero: ignora espacios', function () {
+      igual(M.convertirNumero('  12  '), 12);
+      igual(M.convertirNumero('1 000'), 1000);
+    });
+
+    prueba('convertirNumero: acepta ".5" y signos', function () {
+      igual(M.convertirNumero('.5'), 0.5);
+      igual(M.convertirNumero('-3'), -3);
+      igual(M.convertirNumero('+2'), 2);
+    });
+
+    prueba('convertirNumero: devuelve null para entradas inválidas', function () {
+      const invalidos = ['', '   ', 'abc', '12abc', '1e5', '1.2.3', '1,2.3', '.', '-', null, undefined, {}];
+      invalidos.forEach(function (v) {
+        if (M.convertirNumero(v) !== null) {
+          throw new Error('debía rechazar ' + JSON.stringify(v));
+        }
+      });
+    });
+
+    prueba('convertirNumero: deja pasar números y rechaza NaN/Infinity', function () {
+      igual(M.convertirNumero(7), 7);
+      igual(M.convertirNumero(NaN), null);
+      igual(M.convertirNumero(Infinity), null);
+    });
+
+    // ----- Productos e insumos -----
+    prueba('crearProductoVacio: valores iniciales y objetos independientes', function () {
+      const p = M.crearProductoVacio();
+      igual(p.nombre, '');
+      igual(p.unidadesPorLote, 1);
+      igual(p.costosAdicionales, 0);
+      igual(p.margen, 30);
+      igual(p.impuesto, 0);
+      igual(Array.isArray(p.insumos), true);
+      igual(p.insumos.length, 0);
+      const q = M.crearProductoVacio();
+      p.insumos.push({});
+      igual(q.insumos.length, 0);
+    });
+
+    prueba('crearInsumoVacio: trae todos los campos', function () {
+      const i = M.crearInsumoVacio();
+      igual(i.nombre, '');
+      igual(i.precioCompra, 0);
+      igual(i.cantidadComprada, 1);
+      igual(i.cantidadUsada, 0);
+      igual(i.unidad, 'g');
+    });
+
+    prueba('agregarInsumo: agrega una copia y no modifica el original', function () {
+      const base = M.crearProductoVacio();
+      const ins = { nombre: 'Harina', precioCompra: 4.2, cantidadComprada: 1000, cantidadUsada: 250, unidad: 'g' };
+      const nuevo = M.agregarInsumo(base, ins);
+      ins.nombre = 'Cambiado';
+      igual(nuevo.insumos.length, 1);
+      igual(nuevo.insumos[0].nombre, 'Harina');
+      igual(base.insumos.length, 0);
+    });
+
+    prueba('agregarInsumo: sin argumento agrega un insumo vacío', function () {
+      const nuevo = M.agregarInsumo(M.crearProductoVacio());
+      igual(nuevo.insumos.length, 1);
+      igual(nuevo.insumos[0].cantidadComprada, 1);
+    });
+
+    prueba('quitarInsumo: quita por posición sin modificar el original', function () {
+      let p = M.crearProductoVacio();
+      p = M.agregarInsumo(p, { nombre: 'A' });
+      p = M.agregarInsumo(p, { nombre: 'B' });
+      p = M.agregarInsumo(p, { nombre: 'C' });
+      const sin = M.quitarInsumo(p, 1);
+      igual(sin.insumos.length, 2);
+      igual(sin.insumos[0].nombre, 'A');
+      igual(sin.insumos[1].nombre, 'C');
+      igual(p.insumos.length, 3);
+    });
+
+    prueba('quitarInsumo: una posición inválida no cambia nada', function () {
+      let p = M.crearProductoVacio();
+      p = M.agregarInsumo(p, { nombre: 'A' });
+      p = M.agregarInsumo(p, { nombre: 'B' });
+      [-1, 5, 1.5, '0', undefined, null].forEach(function (pos) {
+        igual(M.quitarInsumo(p, pos).insumos.length, 2);
+      });
+    });
+
+    // ----- normalizarProducto -----
+    prueba('normalizarProducto: convierte textos (coma o punto) a números', function () {
+      const r = M.normalizarProducto({
+        nombre: '  Torta  ',
+        unidadesPorLote: '8',
+        costosAdicionales: '5,35',
+        margen: '40',
+        impuesto: '18',
+        insumos: [
+          { nombre: 'Harina', precioCompra: '4,20', cantidadComprada: '1000', cantidadUsada: '250', unidad: ' g ' }
+        ]
+      });
+      igual(r.errores.length, 0);
+      igual(r.producto.nombre, 'Torta');
+      igual(r.producto.unidadesPorLote, 8);
+      igual(r.producto.costosAdicionales, 5.35);
+      igual(r.producto.margen, 40);
+      igual(r.producto.impuesto, 18);
+      igual(r.producto.insumos[0].precioCompra, 4.2);
+      igual(r.producto.insumos[0].unidad, 'g');
+      igual(typeof r.producto.insumos[0].cantidadUsada, 'number');
+    });
+
+    prueba('normalizarProducto: costos adicionales e impuesto vacíos valen 0', function () {
+      const r = M.normalizarProducto({
+        nombre: 'Pan',
+        unidadesPorLote: '10',
+        costosAdicionales: '',
+        margen: '30',
+        insumos: []
+      });
+      igual(r.errores.length, 0);
+      igual(r.producto.costosAdicionales, 0);
+      igual(r.producto.impuesto, 0);
+    });
+
+    prueba('normalizarProducto: rechaza un nombre vacío', function () {
+      const r = M.normalizarProducto({
+        nombre: '   ',
+        unidadesPorLote: '8',
+        margen: '40',
+        insumos: []
+      });
+      igual(r.producto, null);
+      igual(hayError(r.errores, ['nombre']), true);
+    });
+
+    prueba('normalizarProducto: reporta cada campo numérico inválido', function () {
+      const r = M.normalizarProducto({
+        nombre: 'Pan',
+        unidadesPorLote: '',
+        costosAdicionales: '0',
+        margen: 'abc',
+        impuesto: '0',
+        insumos: []
+      });
+      igual(r.producto, null);
+      igual(r.errores.length, 2);
+      igual(hayError(r.errores, ['unidades por lote']), true);
+      igual(hayError(r.errores, ['margen']), true);
+    });
+
+    prueba('normalizarProducto: los errores de insumos indican el número de fila', function () {
+      const r = M.normalizarProducto({
+        nombre: 'Torta',
+        unidadesPorLote: '8',
+        costosAdicionales: '0',
+        margen: '40',
+        impuesto: '0',
+        insumos: [
+          { nombre: 'Harina', precioCompra: '4.2', cantidadComprada: '1000', cantidadUsada: '250', unidad: 'g' },
+          { nombre: 'Azúcar', precioCompra: 'mucho', cantidadComprada: '1000', cantidadUsada: '200', unidad: 'g' },
+          { nombre: '', precioCompra: '1', cantidadComprada: '1', cantidadUsada: '1' }
+        ]
+      });
+      igual(r.producto, null);
+      igual(r.errores.length, 2);
+      igual(hayError(r.errores, ['Insumo 2', 'precio de compra']), true);
+      igual(hayError(r.errores, ['Insumo 3', 'nombre']), true);
+      igual(hayError(r.errores, ['Insumo 1']), false);
+    });
+
+    prueba('normalizarProducto: conserva el id si existe (como texto)', function () {
+      const base = { nombre: 'Pan', unidadesPorLote: '1', margen: '30', insumos: [] };
+      const conId = M.normalizarProducto(Object.assign({ id: 123 }, base));
+      const sinId = M.normalizarProducto(base);
+      igual(conId.producto.id, '123');
+      igual(sinId.producto.id, undefined);
+    });
+
+    prueba('normalizarProducto: no modifica el borrador original', function () {
+      const borrador = {
+        nombre: '  Torta ',
+        unidadesPorLote: '8',
+        margen: '40',
+        insumos: [{ nombre: 'Harina', precioCompra: '4,2', cantidadComprada: '1000', cantidadUsada: '250' }]
+      };
+      const antes = JSON.stringify(borrador);
+      M.normalizarProducto(borrador);
+      igual(JSON.stringify(borrador), antes);
+    });
+
+    prueba('integración: un producto normalizado se puede calcular con Calculator', function () {
+      const r = M.normalizarProducto({
+        nombre: 'Torta',
+        unidadesPorLote: '8',
+        costosAdicionales: '5,35',
+        margen: '40',
+        impuesto: '18',
+        insumos: [
+          { nombre: 'Harina', precioCompra: '4,2', cantidadComprada: '1000', cantidadUsada: '250', unidad: 'g' },
+          { nombre: 'Azúcar', precioCompra: '3', cantidadComprada: '1000', cantidadUsada: '200', unidad: 'g' },
+          { nombre: 'Huevos', precioCompra: '9', cantidadComprada: '12', cantidadUsada: '4', unidad: 'unidad' }
+        ]
+      });
+      igual(r.errores.length, 0);
+      const c = Calculator.calcularProducto(r.producto);
+      casiIgual(c.costoLote, 10);
+      casiIgual(c.costoUnitario, 1.25);
+      casiIgual(c.precioSugerido, 1.25 / 0.6);
+    });
+
+    prueba('normalizarProducto: entradas inválidas no lanzan error, devuelven errores', function () {
+      [null, undefined, 'texto', 42].forEach(function (entrada) {
+        const r = M.normalizarProducto(entrada);
+        igual(r.producto, null);
+        igual(r.errores.length > 0, true);
+      });
+    });
+
+    // ----- Resumen -----
+    const resumen = document.getElementById('resumen');
+    const todoBien = aprobadas === total;
+    resumen.textContent = (todoBien ? '✅ ' : '❌ ') + aprobadas + ' de ' + total + ' pruebas pasaron';
+    resumen.style.color = todoBien ? '#1e6b34' : '#a11a1a';
+  </script>
+</body>
+</html>
