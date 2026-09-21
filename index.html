@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Calculadora de costos y precio de venta para pequeños negocios.">
+  <title>PrecioJusto: calcula el precio de venta de tus productos</title>
+
+  <!-- Bootstrap 5 (necesita conexión a internet) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Estilos propios (van después de Bootstrap para poder ajustarlo) -->
+  <link href="css/styles.css" rel="stylesheet">
+</head>
+<body>
+
+  <header class="pj-header py-4 mb-4">
+    <div class="container">
+      <h1 class="h2 mb-1">PrecioJusto</h1>
+      <p class="mb-0">Calcula cuánto cuesta producir y a qué precio debes vender.</p>
+    </div>
+  </header>
+
+  <main class="container pb-5">
+
+    <form id="form-producto" novalidate>
+      <input type="hidden" id="producto-id">
+
+      <div class="row g-4">
+
+        <!-- ============ COLUMNA IZQUIERDA: DATOS ============ -->
+        <div class="col-lg-7">
+
+          <!-- 1. Datos del producto -->
+          <section class="card shadow-sm mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h2 class="h5 mb-0">1. Datos del producto</h2>
+              <span id="badge-edicion" class="badge text-bg-warning d-none">Editando</span>
+            </div>
+            <div class="card-body">
+              <div class="row g-3">
+
+                <div class="col-12">
+                  <label for="nombre" class="form-label">Nombre del producto</label>
+                  <input type="text" class="form-control" id="nombre" maxlength="80"
+                         placeholder="Ej.: Torta de chocolate" autocomplete="off">
+                </div>
+
+                <div class="col-sm-6">
+                  <label for="unidadesPorLote" class="form-label">Unidades que rinde el lote</label>
+                  <input type="text" inputmode="decimal" class="form-control" id="unidadesPorLote"
+                         value="1" autocomplete="off">
+                  <div class="form-text">Si con esta receta salen 8 porciones, escribe 8.</div>
+                  <div class="interpretado" id="interp-unidadesPorLote"></div>
+                </div>
+
+                <div class="col-sm-6">
+                  <label for="costosAdicionales" class="form-label">Costos adicionales del lote</label>
+                  <input type="text" inputmode="decimal" class="form-control" id="costosAdicionales"
+                         value="0" autocomplete="off">
+                  <div class="form-text">Gas, empaque, mano de obra... (total del lote).</div>
+                  <div class="interpretado" id="interp-costosAdicionales"></div>
+                </div>
+
+                <div class="col-sm-6">
+                  <label for="margen" class="form-label">Margen de ganancia deseado</label>
+                  <div class="input-group">
+                    <input type="text" inputmode="decimal" class="form-control" id="margen"
+                           value="30" autocomplete="off">
+                    <span class="input-group-text">%</span>
+                  </div>
+                  <div class="form-text">Porcentaje del precio de venta que quieres ganar.</div>
+                  <div class="interpretado" id="interp-margen"></div>
+                </div>
+
+                <div class="col-sm-6">
+                  <label for="impuesto" class="form-label">Impuesto (opcional)</label>
+                  <div class="input-group">
+                    <input type="text" inputmode="decimal" class="form-control" id="impuesto"
+                           value="0" autocomplete="off">
+                    <span class="input-group-text">%</span>
+                  </div>
+                  <div class="form-text">IVA, IGV u otro. Verifica la tasa vigente en tu país.</div>
+                  <div class="interpretado" id="interp-impuesto"></div>
+                </div>
+
+              </div>
+            </div>
+          </section>
+
+          <!-- 2. Insumos -->
+          <section class="card shadow-sm">
+            <div class="card-header">
+              <h2 class="h5 mb-0">2. Insumos del lote</h2>
+            </div>
+            <div class="card-body">
+              <p class="text-body-secondary small">
+                Escribe cuánto pagaste por cada insumo y cuánto usas en <strong>un lote</strong>.
+                La cantidad comprada y la usada deben estar en la <strong>misma unidad</strong>
+                (por ejemplo, las dos en gramos).
+              </p>
+
+              <div class="table-responsive">
+                <table class="table table-sm tabla-insumos">
+                  <caption class="visually-hidden">Lista de insumos del lote</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Insumo</th>
+                      <th scope="col">Precio pagado</th>
+                      <th scope="col">Cant. comprada</th>
+                      <th scope="col">Unidad</th>
+                      <th scope="col">Cant. usada</th>
+                      <th scope="col" class="text-end">Costo</th>
+                      <th scope="col"><span class="visually-hidden">Quitar</span></th>
+                    </tr>
+                  </thead>
+                  <tbody id="insumos-body"></tbody>
+                </table>
+              </div>
+
+              <p id="insumos-vacio" class="text-center text-body-secondary py-3 mb-2">
+                Aún no agregaste insumos. Pulsa «Agregar insumo».
+              </p>
+
+              <button type="button" id="btn-agregar-insumo" class="btn btn-outline-primary btn-sm">
+                + Agregar insumo
+              </button>
+            </div>
+          </section>
+
+        </div>
+
+        <!-- ============ COLUMNA DERECHA: RESULTADOS ============ -->
+        <div class="col-lg-5">
+          <aside class="panel-sticky" aria-labelledby="titulo-resultados">
+            <section class="card shadow-sm">
+              <div class="card-header">
+                <h2 class="h5 mb-0" id="titulo-resultados">Resultados</h2>
+              </div>
+
+              <div class="card-body">
+                <div id="mensaje-resultado" class="alert alert-secondary" role="status" aria-live="polite">
+                  Completa los datos para ver el precio sugerido.
+                </div>
+
+                <div class="text-center my-3">
+                  <div class="text-body-secondary small">Precio de venta sugerido</div>
+                  <div class="precio-destacado" id="res-precio-sugerido">—</div>
+                </div>
+
+                <dl class="mb-0">
+                  <div class="resultado-fila">
+                    <dt>Costo del lote</dt>
+                    <dd id="res-costo-lote">—</dd>
+                  </div>
+                  <div class="resultado-fila">
+                    <dt>Costo por unidad</dt>
+                    <dd id="res-costo-unitario">—</dd>
+                  </div>
+                  <div class="resultado-fila">
+                    <dt>Ganancia por unidad</dt>
+                    <dd id="res-ganancia">—</dd>
+                  </div>
+                  <div class="resultado-fila">
+                    <dt>Precio final con impuesto</dt>
+                    <dd id="res-precio-final">—</dd>
+                  </div>
+                </dl>
+
+                <details class="mt-3 small">
+                  <summary>¿Margen o markup? No es lo mismo</summary>
+                  <p class="mt-2 mb-1">
+                    El <strong>margen</strong> es la parte del precio de venta que queda como ganancia.
+                    El <strong>markup</strong> es el porcentaje que se suma al costo.
+                  </p>
+                  <p class="mb-0">
+                    Ejemplo: con costo 5.00 y 40 % de margen, el precio es 8.33 (ganas 3.33).
+                    Con 40 % de markup el precio sería 7.00 y tu ganancia sería solo el 28.6 % del precio.
+                  </p>
+                </details>
+
+                <p class="text-body-secondary small mt-3 mb-0">
+                  Los valores están en la misma moneda con la que escribiste tus precios.
+                </p>
+              </div>
+
+              <div class="card-footer d-grid gap-2">
+                <button type="submit" class="btn btn-primary" id="btn-guardar">Guardar producto</button>
+                <button type="button" class="btn btn-outline-secondary" id="btn-nuevo">Nuevo producto</button>
+                <div id="mensaje-estado" class="small" role="status" aria-live="polite"></div>
+              </div>
+            </section>
+          </aside>
+        </div>
+
+      </div>
+    </form>
+
+    <!-- ============ PRODUCTOS GUARDADOS ============ -->
+    <section class="card shadow-sm mt-4" aria-labelledby="titulo-guardados">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0" id="titulo-guardados">Mis productos guardados</h2>
+        <span class="badge text-bg-secondary" id="contador-productos">0</span>
+      </div>
+      <div class="card-body">
+        <p id="productos-vacio" class="text-body-secondary mb-0">
+          Todavía no guardaste ningún producto.
+        </p>
+        <ul id="lista-productos" class="list-group list-group-flush"></ul>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="text-center text-body-secondary small pb-4 px-3">
+    Tus datos se guardan solo en este navegador (LocalStorage) y no se envían a ningún servidor.
+    Si borras los datos del sitio, se pierden.
+  </footer>
+
+  <!-- Sugerencias de unidades para el campo "Unidad" -->
+  <datalist id="lista-unidades">
+    <option value="g"></option>
+    <option value="kg"></option>
+    <option value="ml"></option>
+    <option value="l"></option>
+    <option value="unidad"></option>
+    <option value="docena"></option>
+    <option value="taza"></option>
+    <option value="cucharada"></option>
+    <option value="metro"></option>
+  </datalist>
+
+  <!-- ============ MOLDES (los usa app.js en la Etapa 7) ============ -->
+
+  <template id="plantilla-insumo">
+    <tr class="fila-insumo">
+      <td class="col-nombre">
+        <input type="text" class="form-control form-control-sm" data-campo="nombre"
+               maxlength="60" placeholder="Ej.: Harina" aria-label="Nombre del insumo" autocomplete="off">
+      </td>
+      <td class="col-numero">
+        <input type="text" inputmode="decimal" class="form-control form-control-sm"
+               data-campo="precioCompra" aria-label="Precio pagado por el insumo" autocomplete="off">
+        <div class="interpretado" data-interpretado="precioCompra"></div>
+      </td>
+      <td class="col-numero">
+        <input type="text" inputmode="decimal" class="form-control form-control-sm"
+               data-campo="cantidadComprada" aria-label="Cantidad comprada" autocomplete="off">
+        <div class="interpretado" data-interpretado="cantidadComprada"></div>
+      </td>
+      <td class="col-unidad">
+        <input type="text" list="lista-unidades" class="form-control form-control-sm"
+               data-campo="unidad" maxlength="20" aria-label="Unidad de medida" autocomplete="off">
+      </td>
+      <td class="col-numero">
+        <input type="text" inputmode="decimal" class="form-control form-control-sm"
+               data-campo="cantidadUsada" aria-label="Cantidad usada en el lote" autocomplete="off">
+        <div class="interpretado" data-interpretado="cantidadUsada"></div>
+      </td>
+      <td class="col-costo text-end">
+        <span class="costo-insumo fw-semibold">—</span>
+      </td>
+      <td class="text-end">
+        <button type="button" class="btn btn-outline-danger btn-sm" data-accion="quitar-insumo"
+                aria-label="Quitar insumo" title="Quitar insumo">✕</button>
+      </td>
+    </tr>
+  </template>
+
+  <template id="plantilla-producto">
+    <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <div class="fw-semibold producto-nombre"></div>
+        <div class="small text-body-secondary producto-detalle"></div>
+      </div>
+      <div class="btn-group btn-group-sm" role="group" aria-label="Acciones del producto">
+        <button type="button" class="btn btn-outline-primary" data-accion="editar">Editar</button>
+        <button type="button" class="btn btn-outline-danger" data-accion="eliminar">Eliminar</button>
+      </div>
+    </li>
+  </template>
+
+  <!-- Scripts: primero la lógica ya probada, al final app.js -->
+  <script src="js/calculator.js"></script>
+  <script src="js/model.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

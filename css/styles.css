@@ -1,0 +1,114 @@
+/* styles.css: estilos propios de PrecioJusto (Bootstrap hace el resto) */
+
+:root {
+  --pj-acento: #0f766e;
+  --pj-acento-oscuro: #115e59;
+  --pj-fondo: #f4f7f6;
+}
+
+body {
+  background-color: var(--pj-fondo);
+}
+
+/* ----- Encabezado ----- */
+.pj-header {
+  background: linear-gradient(135deg, var(--pj-acento), var(--pj-acento-oscuro));
+  color: #fff;
+}
+
+/* ----- Botones y campos con el color de la marca ----- */
+.btn-primary {
+  --bs-btn-bg: var(--pj-acento);
+  --bs-btn-border-color: var(--pj-acento);
+  --bs-btn-hover-bg: var(--pj-acento-oscuro);
+  --bs-btn-hover-border-color: var(--pj-acento-oscuro);
+  --bs-btn-active-bg: var(--pj-acento-oscuro);
+  --bs-btn-active-border-color: var(--pj-acento-oscuro);
+  --bs-btn-disabled-bg: var(--pj-acento);
+  --bs-btn-disabled-border-color: var(--pj-acento);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--pj-acento);
+  --bs-btn-border-color: var(--pj-acento);
+  --bs-btn-hover-bg: var(--pj-acento);
+  --bs-btn-hover-border-color: var(--pj-acento);
+  --bs-btn-active-bg: var(--pj-acento-oscuro);
+  --bs-btn-active-border-color: var(--pj-acento-oscuro);
+}
+
+.form-control:focus {
+  border-color: var(--pj-acento);
+  box-shadow: 0 0 0 0.25rem rgba(15, 118, 110, 0.25);
+}
+
+/* ----- Tabla de insumos ----- */
+.tabla-insumos {
+  min-width: 820px; /* en pantallas angostas se desplaza de lado dentro de su caja */
+}
+
+.tabla-insumos th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.tabla-insumos td {
+  vertical-align: top;
+}
+
+.tabla-insumos td.col-costo {
+  padding-top: 0.5rem;
+  white-space: nowrap;
+}
+
+.col-nombre { min-width: 160px; }
+.col-numero { min-width: 110px; }
+.col-unidad { min-width: 100px; }
+
+/* Texto pequeño bajo cada campo numérico: "Se leerá como 4.5" */
+.interpretado {
+  min-height: 1.1rem;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+/* ----- Resultados ----- */
+.precio-destacado {
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--pj-acento);
+}
+
+.resultado-fila {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.resultado-fila:last-child {
+  border-bottom: 0;
+}
+
+.resultado-fila dt {
+  font-weight: 400;
+  color: var(--bs-secondary-color);
+}
+
+.resultado-fila dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* En pantallas grandes, los resultados se quedan visibles al bajar */
+@media (min-width: 992px) {
+  .panel-sticky {
+    position: sticky;
+    top: 1rem;
+  }
+}
