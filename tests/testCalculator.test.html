@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pruebas de calculator.js</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+    #resumen { font-size: 1.25rem; font-weight: bold; }
+    ul { list-style: none; padding: 0; }
+    li { padding: .4rem .6rem; margin: .25rem 0; border-radius: 6px; }
+    li.ok { background: #e6f4ea; color: #1e6b34; }
+    li.fallo { background: #fdeaea; color: #a11a1a; }
+  </style>
+</head>
+<body>
+  <h1>Pruebas de calculator.js</h1>
+  <p id="resumen"></p>
+  <ul id="resultados"></ul>
+
+  <script src="../js/calculator.js"></script>
+  <script>
+    const C = Calculator;
+    const lista = document.getElementById('resultados');
+    let total = 0;
+    let aprobadas = 0;
+
+    // ----- Mini herramientas de prueba -----
+    function prueba(nombre, fn) {
+      total++;
+      const li = document.createElement('li');
+      try {
+        fn();
+        aprobadas++;
+        li.className = 'ok';
+        li.textContent = '✅ ' + nombre;
+      } catch (e) {
+        li.className = 'fallo';
+        li.textContent = '❌ ' + nombre + ' → ' + e.message;
+      }
+      lista.appendChild(li);
+    }
+
+    // Compara números con una tolerancia mínima (los decimales en JS no son exactos).
+    function casiIgual(actual, esperado, tolerancia) {
+      const tol = tolerancia === undefined ? 1e-9 : tolerancia;
+      if (Math.abs(actual - esperado) > tol) {
+        throw new Error('se esperaba ' + esperado + ' pero se obtuvo ' + actual);
+      }
+    }
+
+    // Verifica que una función lance un error.
+    function debeLanzar(fn) {
+      try {
+        fn();
+      } catch (e) {
+        return;
+      }
+      throw new Error('se esperaba un error y no ocurrió');
+    }
+
+    // ----- Datos de ejemplo -----
+    const harina = { precioCompra: 4.2, cantidadComprada: 1000, cantidadUsada: 250 };
+    const azucar = { precioCompra: 3, cantidadComprada: 1000, cantidadUsada: 200 };
+    const huevos = { precioCompra: 9, cantidadComprada: 12, cantidadUsada: 4 };
+
+    const productoEjemplo = {
+      insumos: [harina, azucar, huevos],   // 1.05 + 0.60 + 3.00 = 4.65
+      costosAdicionales: 5.35,             // lote = 10.00
+      unidadesPorLote: 8,                  // unitario = 1.25
+      margen: 40,
+      impuesto: 18
+    };
+
+    // ----- Pruebas -----
+    prueba('costoInsumo: calcula el costo proporcional (harina = 1.05)', function () {
+      casiIgual(C.costoInsumo(harina), 1.05);
+    });
+
+    prueba('costoInsumo: rechaza cantidad comprada = 0', function () {
+      debeLanzar(function () {
+        C.costoInsumo({ precioCompra: 5, cantidadComprada: 0, cantidadUsada: 1 });
+      });
+    });
+
+    prueba('costoLote: suma insumos + costos adicionales (= 10)', function () {
+      casiIgual(C.costoLote([harina, azucar, huevos], 5.35), 10);
+    });
+
+    prueba('costoLote: sin insumos devuelve solo los costos adicionales', function () {
+      casiIgual(C.costoLote([], 6.5), 6.5);
+    });
+
+    prueba('costoUnitario: 10 / 8 unidades = 1.25', function () {
+      casiIgual(C.costoUnitario(10, 8), 1.25);
+    });
+
+    prueba('costoUnitario: rechaza 0 unidades por lote', function () {
+      debeLanzar(function () { C.costoUnitario(10, 0); });
+    });
+
+    prueba('precioSugerido: costo 5 y margen 40 % = 8.33', function () {
+      casiIgual(C.redondear(C.precioSugerido(5, 40)), 8.33);
+    });
+
+    prueba('precioSugerido: el margen es sobre el precio, no markup', function () {
+      const precio = C.precioSugerido(5, 40);
+      casiIgual((precio - 5) / precio, 0.4);   // la ganancia es 40 % del precio
+      if (Math.abs(precio - 7) < 0.01) {
+        throw new Error('se está calculando markup (7.00) en lugar de margen');
+      }
+    });
+
+    prueba('precioSugerido: margen 0 % deja el precio igual al costo', function () {
+      casiIgual(C.precioSugerido(5, 0), 5);
+    });
+
+    prueba('precioSugerido: rechaza margen de 100 %', function () {
+      debeLanzar(function () { C.precioSugerido(5, 100); });
+    });
+
+    prueba('precioFinal: 100 con 18 % de impuesto = 118', function () {
+      casiIgual(C.precioFinal(100, 18), 118);
+    });
+
+    prueba('redondear: 8.333333 → 8.33 y 2.345678 con 3 decimales → 2.346', function () {
+      casiIgual(C.redondear(8.333333), 8.33);
+      casiIgual(C.redondear(2.345678, 3), 2.346);
+    });
+
+    prueba('calcularProducto: caso completo', function () {
+      const r = C.calcularProducto(productoEjemplo);
+      casiIgual(r.costoLote, 10);
+      casiIgual(r.costoUnitario, 1.25);
+      casiIgual(r.precioSugerido, 1.25 / 0.6);
+      casiIgual(r.gananciaUnidad, 1.25 / 0.6 - 1.25);
+      casiIgual(r.precioFinal, (1.25 / 0.6) * 1.18);
+    });
+
+    prueba('calcularProducto: sin impuesto, precioFinal = precioSugerido', function () {
+      const sinImpuesto = {
+        insumos: [harina],
+        costosAdicionales: 0,
+        unidadesPorLote: 1,
+        margen: 25
+      };
+      const r = C.calcularProducto(sinImpuesto);
+      casiIgual(r.precioFinal, r.precioSugerido);
+    });
+
+    prueba('calcularProducto: rechaza datos inválidos (margen 100)', function () {
+      debeLanzar(function () {
+        C.calcularProducto({
+          insumos: [harina],
+          costosAdicionales: 0,
+          unidadesPorLote: 1,
+          margen: 100
+        });
+      });
+    });
+
+    // ----- Resumen -----
+    const resumen = document.getElementById('resumen');
+    const todoBien = aprobadas === total;
+    resumen.textContent = (todoBien ? '✅ ' : '❌ ') + aprobadas + ' de ' + total + ' pruebas pasaron';
+    resumen.style.color = todoBien ? '#1e6b34' : '#a11a1a';
+  </script>
+</body>
+</html>
